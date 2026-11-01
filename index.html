@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slate</title>
+<script>
+try { document.documentElement.dataset.theme = localStorage.getItem("slate.theme") || "dark"; } catch {}
+</script>
+<style>
+:root{color-scheme:dark;--bg:#171917;--panel:#1c1e1c;--editor:#171917;--ink:#e4e7e2;--muted:#a0a79e;--line:#353b34;--accent:#8bc59b;--selected:#273d2d;--hover:#252a24;--ui:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+:root[data-theme="light"]{color-scheme:light;--bg:#f5f6f3;--panel:#fff;--editor:#fff;--ink:#242a23;--muted:#626b5f;--line:#d4dad0;--accent:#2f7041;--selected:#e0eddf;--hover:#edf0e9}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{height:100vh;height:100dvh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:13px/1.4 var(--ui)}
+button,input{font:inherit;color:inherit}
+button{min-height:32px;padding:4px 12px;border:1px solid var(--line);border-radius:2px;background:transparent;cursor:pointer;text-align:left}
+button:hover{background:var(--hover)}
+button:focus-visible,input:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+kbd{font:11px var(--ui);color:var(--muted);white-space:nowrap;margin-left:12px}
+header{min-height:48px;display:flex;align-items:center;gap:12px;padding:8px 12px;border-bottom:1px solid var(--line)}
+header strong{font-size:14px;font-weight:600}
+header .spacer{flex:1}
+header button{white-space:nowrap}
+#welcome{flex:1;min-height:0;overflow:auto;padding:48px 24px}
+.welcome-inner{width:100%;max-width:520px;margin:auto}
+h1{font-size:20px;line-height:1.2;font-weight:600;margin:0 0 12px}
+.welcome-inner>p{color:var(--muted);margin:0 0 24px}
+.choices{display:grid;border-top:1px solid var(--line)}
+.choices button{min-height:64px;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:16px;font-size:14px}
+.welcome-inner .limits{font-size:12px;margin-top:24px}
+#workspace{flex:1;min-height:0;display:grid;grid-template-columns:160px minmax(0,1fr) minmax(0,1fr)}
+.explorer{min-width:0;min-height:0;display:grid;grid-template-rows:36px minmax(0,1fr) auto;border-right:1px solid var(--line);background:var(--panel)}
+.bar{min-height:36px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 12px;border-bottom:1px solid var(--line);font-size:12px}
+.bar button{min-height:28px;padding:2px 8px}
+#files{overflow:auto;padding:4px}
+#files button{display:block;width:100%;border:0;border-radius:0;font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#files button.active{background:var(--selected);color:var(--accent)}
+.file-tools{display:flex;gap:4px;padding:4px;border-top:1px solid var(--line)}
+.file-tools button{flex:1;padding:4px;font-size:11px;text-align:center}
+.editor-pane,.preview-pane{min-width:0;min-height:0;display:grid;grid-template-rows:36px minmax(0,1fr);overflow:hidden}
+.editor-pane{border-right:1px solid var(--line)}
+#activeName{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#editor{min-height:0;overflow:hidden;background:var(--editor)}
+#editor .cm-editor{height:100%;color:var(--ink);background:var(--editor)}
+#editor .cm-scroller{overflow:auto;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+#editor .cm-gutters{background:var(--editor);color:var(--muted);border-right:1px solid var(--line)}
+#editor .cm-activeLine,#editor .cm-activeLineGutter{background:var(--hover)}
+#editor .cm-selectionBackground{background:var(--selected)!important}
+#editor .cm-cursor{border-left:1px solid var(--accent)}
+#editor .cm-focused{outline:1px solid var(--accent);outline-offset:-1px}
+#editor .cm-placeholder{color:var(--muted);font-family:var(--ui)}
+.preview-pane{grid-template-rows:36px minmax(0,1fr) auto}
+iframe{display:block;width:100%;height:100%;border:0;background:white}
+.preview-note{margin:0;padding:8px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+#viewSwitch{display:none}
+footer{display:flex;justify-content:space-between;gap:16px;min-height:32px;padding:8px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+dialog{width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 48px);padding:0;border:1px solid var(--line);border-radius:2px;background:var(--panel);color:var(--ink);box-shadow:0 12px 32px #0004}
+dialog::backdrop{background:#0006}
+dialog .bar{min-height:44px}
+dialog h2{margin:0;font-size:14px;font-weight:600}
+#filter{display:block;width:calc(100% - 24px);margin:12px;padding:8px;border:1px solid var(--line);border-radius:2px;background:var(--bg)}
+#menuItems{padding:4px;max-height:55dvh;overflow:auto}
+#menuItems button{display:flex;justify-content:space-between;align-items:center;width:100%;border:0;border-radius:0}
+#menuItems p{padding:8px;margin:0;color:var(--muted)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:760px){
+  header{gap:8px}header kbd{display:none}
+  #workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 40px minmax(0,1fr)}
+  .explorer{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .explorer>.bar{display:none}#files{display:flex;gap:4px;min-width:0}#files button{width:auto;flex-shrink:0}
+  .file-tools{border-top:0;border-left:1px solid var(--line);align-items:center}
+  #viewSwitch{display:flex;padding:4px;gap:4px;border-bottom:1px solid var(--line)}
+  #viewSwitch button{flex:1;text-align:center;min-height:32px}
+  #viewSwitch button[aria-pressed="true"]{color:var(--accent);background:var(--selected)}
+  .editor-pane,.preview-pane{grid-column:1;grid-row:3;border-right:0}
+  body[data-pane="code"] .preview-pane,body[data-pane="preview"] .editor-pane{display:none}
+  footer{flex-direction:column;gap:4px}
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.5.2",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.36.5?external=@codemirror/state",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.8.1?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/highlight",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.11.0?external=@codemirror/state,@codemirror/view,@lezer/highlight",
+    "@codemirror/lang-html": "https://esm.sh/@codemirror/lang-html@6.4.9?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/highlight",
+    "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1"
+  }
+}
+</script>
+</head>
+<body data-pane="code">
+<header>
+  <strong>Slate</strong>
+  <span class="spacer"></span>
+  <button id="commands">Commands <kbd data-shortcut="K"></kbd></button>
+  <button id="theme"></button>
+</header>
+<main id="welcome">
+  <div class="welcome-inner">
+    <h1>Workspace</h1>
+    <p>Choose how to begin.</p>
+    <div class="choices">
+      <button id="blank">Start with a blank page</button>
+      <button id="starters">Open a starter project</button>
+      <button id="folder">Open a folder from my computer</button>
+    </div>
+    <p class="limits">This first version opens pages directly inside a folder. Linked files are not supported. Your original files stay unchanged.</p>
+  </div>
+</main>
+<main id="workspace" hidden>
+  <aside class="explorer" aria-label="Files">
+    <div class="bar">Files</div>
+    <nav id="files" aria-label="Open files"></nav>
+    <div class="file-tools">
+      <button id="newFile">New</button>
+      <button id="renameFile">Rename</button>
+      <button id="deleteFile">Delete</button>
+    </div>
+  </aside>
+  <div id="viewSwitch" aria-label="Workspace view">
+    <button id="codeView" aria-pressed="true">Editor</button>
+    <button id="previewView" aria-pressed="false">Preview</button>
+  </div>
+  <section class="editor-pane" aria-label="Code editor">
+    <div class="bar">
+      <span id="activeName"></span>
+      <button id="save">Save <kbd data-shortcut="S"></kbd></button>
+    </div>
+    <div id="editor"></div>
+  </section>
+  <section class="preview-pane" aria-label="Page preview">
+    <div class="bar">
+      <span>Preview</span>
+      <button id="run">Run <kbd data-shortcut="Enter"></kbd></button>
+    </div>
+    <iframe id="preview" title="Live page preview" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+    <p class="preview-note">Linked files are not supported. Keep styles and scripts inside this page.</p>
+  </section>
+</main>
+<footer><span id="status">Choose a starting point.</span><span>Browser copy only. Original files stay unchanged.</span></footer>
+<div id="announce" class="sr-only" role="status" aria-live="polite"></div>
+<dialog id="menu" aria-labelledby="menuTitle">
+  <div class="bar"><h2 id="menuTitle"></h2><button id="closeMenu">Close</button></div>
+  <input id="filter" type="search" aria-label="Find an action" placeholder="Find an action" autocomplete="off">
+  <div id="menuItems"></div>
+</dialog>
+<input id="folderInput" type="file" accept=".html,.htm" multiple webkitdirectory hidden>
+<script type="module">
+const $ = id => document.getElementById(id);
+const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? "Cmd" : "Ctrl";
+let project = {files:[],active:null}, view = null, engine = null, enginePromise = null;
+let interacted = false, openTicket = 0, revision = 0, savedRevision = 0, saveTimer, previewTimer, useFilePicker = false;
+const editorStates = new WeakMap();
+const currentFile = () => project.files.find(file => file.name === project.active);
+function say(text, error = false) { $("status").textContent = text; if (error) $("announce").textContent = text; }
+document.querySelectorAll("[data-shortcut]").forEach(node => node.textContent = mod + "+" + node.dataset.shortcut);
+function updateThemeLabel() { $("theme").textContent = document.documentElement.dataset.theme === "dark" ? "Light theme" : "Dark theme"; }
+function toggleTheme() {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("slate.theme", root.dataset.theme); } catch {}
+  updateThemeLabel();
+}
+function samplePage(title, content, script = "") {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 24px;color:#202820;background:#fff}
+h1{font-size:28px;line-height:1.2}h2{font-size:20px}
+button{font:inherit;padding:8px 12px;background:white;color:inherit;border:1px solid #798176;border-radius:2px;cursor:pointer}
+section{margin-top:32px}
+</style>
+</head>
+<body>
+${content}
+${script ? `<script>${script}<\/script>` : ""}
+</body>
+</html>`;
+}
+const starterPages = [
+  {label:"Personal site",text:samplePage("Personal site example",`<p>Personal site example</p><h1>My website</h1><section><h2>About</h2><p>This is a place to introduce myself.</p></section><section><h2>What I make</h2><p>I can use this section to describe my work.</p></section>`)},
+  {label:"Landing page",text:samplePage("Landing page example",`<p>Landing page example</p><h1>One page, one idea.</h1><p>A heading, a description and a button.</p><button id="detailsButton">Show details</button><p id="details" hidden>This button changes what is visible on the page.</p>`,`const button=document.getElementById("detailsButton");const details=document.getElementById("details");button.onclick=()=>{details.hidden=!details.hidden;button.textContent=details.hidden?"Show details":"Hide details";};`)},
+  {label:"Small app",text:samplePage("Counter example",`<p>Small app example</p><h1>Counter</h1><p>Count: <output id="count" aria-live="polite">0</output></p><button id="add">Add one</button> <button id="reset">Reset</button><p>Reloading the preview resets the count.</p>`,`let count=0;const output=document.getElementById("count");document.getElementById("add").onclick=()=>{output.textContent=++count;};document.getElementById("reset").onclick=()=>{count=0;output.textContent=count;};`)}
+];
+const dbReady = new Promise(resolve => {
+  let settled = false;
+  const finish = db => { if (settled) { db?.close(); return; } settled = true; resolve(db); };
+  try {
+    const request = indexedDB.open("slate-workspace", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("workspace");
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      finish(request.result);
+    };
+    request.onerror = request.onblocked = () => finish(null);
+  } catch { finish(null); }
+});
+function saveSoon() {
+  revision++;
+  say("Saving in this browser.");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 300);
+}
+async function saveNow() {
+  clearTimeout(saveTimer);
+  const version = revision;
+  const snapshot = {active:project.active,files:project.files.map(file => ({name:file.name,text:file.text}))};
+  const db = await dbReady;
+  if (!db) { say("Not saved. Browser storage is unavailable; changes remain only in this tab.", true); return; }
+  try {
+    const transaction = db.transaction("workspace", "readwrite");
+    transaction.objectStore("workspace").put(snapshot, "current");
+    await new Promise((resolve,reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("Saving was interrupted."));
+    });
+    savedRevision = Math.max(savedRevision, version);
+    if (version === revision) say("Saved in this browser.");
+  } catch (error) { say("Not saved. " + error.message, true); }
+}
+async function loadEditor() {
+  if (engine) return;
+  if (!enginePromise) enginePromise = (async () => {
+    const [state,editor,commands,language,html,highlight] = await Promise.all([
+      import("@codemirror/state"),import("@codemirror/view"),import("@codemirror/commands"),
+      import("@codemirror/language"),import("@codemirror/lang-html"),import("@lezer/highlight")
+    ]);
+    const tags = highlight.tags;
+    const colors = language.HighlightStyle.define([
+      {tag:[tags.keyword,tags.tagName],color:"var(--accent)"},
+      {tag:[tags.string,tags.number,tags.attributeName],color:"var(--ink)"},
+      {tag:tags.comment,color:"var(--muted)",fontStyle:"italic"}
+    ]);
+    engine = {State:state.EditorState,View:editor.EditorView,extensions:[
+      editor.lineNumbers(),editor.drawSelection(),editor.highlightActiveLine(),editor.highlightActiveLineGutter(),
+      commands.history(),editor.keymap.of([...commands.defaultKeymap,...commands.historyKeymap]),
+      language.indentOnInput(),language.bracketMatching(),html.html(),language.syntaxHighlighting(colors),
+      editor.EditorView.lineWrapping,editor.placeholder(`Type a line. Press ${mod}+Enter to preview.`),
+      editor.EditorView.contentAttributes.of({"aria-label":"Page source",spellcheck:"false"})
+    ]};
+  })();
+  await enginePromise;
+}
+function setPane(pane) {
+  document.body.dataset.pane = pane;
+  $("codeView").setAttribute("aria-pressed", String(pane === "code"));
+  $("previewView").setAttribute("aria-pressed", String(pane === "preview"));
+  if (pane === "code") view?.focus();
+}
+function renderPreview() {
+  if (!view) return;
+  const protection = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; base-uri about:; form-action 'none'"><base href="about:srcdoc">`;
+  const bridge = `<script>document.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&["k","s","enter"].includes(e.key.toLowerCase())){e.preventDefault();e.stopPropagation();parent.postMessage({slateShortcut:e.key},"*");}},true);<\/script>`;
+  $("preview").srcdoc = protection + bridge + view.state.doc.toString();
+}
+function runPreview() { if (view) { clearTimeout(previewTimer); renderPreview(); setPane("preview"); } }
+function drawFiles() {
+  $("files").replaceChildren();
+  for (const file of project.files) {
+    const button = document.createElement("button");
+    button.textContent = file.name;
+    button.className = file.name === project.active ? "active" : "";
+    if (file.name === project.active) button.setAttribute("aria-current", "page");
+    button.onclick = () => activateFile(file.name);
+    $("files").append(button);
+  }
+}
+function activateFile(name) {
+  const previous = currentFile();
+  if (view && previous) editorStates.set(previous, view.state);
+  project.active = name;
+  const file = currentFile();
+  let state = editorStates.get(file);
+  if (!state) state = engine.State.create({doc:file.text,extensions:[
+    ...engine.extensions,
+    engine.View.updateListener.of(update => {
+      if (!update.docChanged) return;
+      file.text = update.state.doc.toString();
+      saveSoon();
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(renderPreview, 250);
+    })
+  ]});
+  if (view) view.setState(state);
+  else view = new engine.View({state,parent:$("editor")});
+  $("activeName").textContent = file.name;
+  drawFiles(); renderPreview(); setPane("code"); saveSoon();
+}
+async function startProject(next, restoring = false) {
+  if (!restoring) {
+    interacted = true;
+    if (project.files.length && !confirm("Replace the current workspace? Its browser copy will be replaced.")) return;
+  }
+  const ticket = ++openTicket;
+  say("Loading editor.");
+  try {
+    await loadEditor();
+    if (ticket !== openTicket || (restoring && interacted)) return;
+    view?.destroy(); view = null; $("editor").replaceChildren();
+    project = next;
+    $("welcome").hidden = true; $("workspace").hidden = false;
+    activateFile(project.files.some(file => file.name === project.active) ? project.active : project.files[0].name);
+  } catch (error) { say("Editor could not load. Check your connection and reload this page. " + error.message, true); }
+}
+const startBlank = () => startProject({files:[{name:"index.html",text:""}],active:"index.html"});
+function askName(initial, except = null) {
+  const name = prompt("Page name, ending in .html or .htm:", initial)?.trim();
+  if (!name) return null;
+  if (/[\\/]/.test(name) || !/\.html?$/i.test(name)) { say("Use a page name ending in .html or .htm, without folder separators.", true); return null; }
+  if (project.files.some(file => file !== except && file.name.toLowerCase() === name.toLowerCase())) { say("That name is already in use.", true); return null; }
+  return name;
+}
+function newFile() {
+  const name = askName("untitled.html");
+  if (!name) return;
+  project.files.push({name,text:""});
+  activateFile(name);
+}
+function renameFile() {
+  const file = currentFile();
+  if (!file) return;
+  const name = askName(file.name, file);
+  if (!name) return;
+  file.name = name; project.active = name;
+  $("activeName").textContent = name; drawFiles(); saveSoon();
+}
+function deleteFile() {
+  const file = currentFile();
+  if (!file || !confirm(`Delete ${file.name} from this browser workspace? Your original file will not change.`)) return;
+  project.files = project.files.filter(item => item !== file);
+  if (project.files.length) activateFile(project.files[0].name);
+  else {
+    view.destroy(); view = null; project.active = null; $("preview").srcdoc = "";
+    $("workspace").hidden = true; $("welcome").hidden = false; saveSoon(); $("blank").focus();
+  }
+}
+function showMenu(title, actions, searchable = true) {
+  const menu = $("menu");
+  if (menu.open) menu.close();
+  $("menuTitle").textContent = title; $("filter").hidden = !searchable; $("filter").value = "";
+  const draw = () => {
+    $("menuItems").replaceChildren();
+    const matches = actions.filter(action => action.label.toLowerCase().includes($("filter").value.toLowerCase()));
+    for (const action of matches) {
+      const button = document.createElement("button"), label = document.createElement("span");
+      label.textContent = action.label; button.append(label);
+      if (action.keys) { const key = document.createElement("kbd"); key.textContent = action.keys; button.append(key); }
+      button.onclick = () => { menu.close(); action.run(); };
+      $("menuItems").append(button);
+    }
+    if (!matches.length) { const text = document.createElement("p"); text.textContent = "No matching actions."; $("menuItems").append(text); }
+  };
+  $("filter").oninput = draw; draw(); menu.showModal();
+  (searchable ? $("filter") : $("menuItems").querySelector("button"))?.focus();
+}
+function openStarters() {
+  interacted = true;
+  showMenu("Open a starter project", starterPages.map(page => ({
+    label:page.label,run:() => startProject({files:[{name:"index.html",text:page.text}],active:"index.html"})
+  })), false);
+}
+function openCommands() {
+  const actions = [
+    {label:"Start with a blank page",run:startBlank},
+    {label:"Open a starter project",run:openStarters},
+    {label:"Open a folder from my computer",run:openFolder},
+    {label:$("theme").textContent,run:toggleTheme}
+  ];
+  if (currentFile()) actions.push(
+    {label:"New page",run:newFile},{label:"Rename current page",run:renameFile},{label:"Delete current page",run:deleteFile},
+    {label:"Save to this browser",keys:mod+"+S",run:saveNow},{label:"Run preview",keys:mod+"+Enter",run:runPreview},
+    {label:"Show editor",run:() => setPane("code")},{label:"Show preview",run:() => setPane("preview")},
+    ...project.files.map(file => ({label:"Open "+file.name,run:() => activateFile(file.name)}))
+  );
+  showMenu("Commands", actions);
+}
+async function importPages(files) {
+  const pages = files.filter(file => /\.html?$/i.test(file.name)).sort((a,b) => a.name.localeCompare(b.name));
+  if (!pages.length) { say("No .html or .htm pages found directly inside that folder.", true); return; }
+  const imported = await Promise.all(pages.map(async file => ({name:file.name,text:await file.text()})));
+  await startProject({files:imported,active:imported.find(file => file.name.toLowerCase() === "index.html")?.name || imported[0].name});
+}
+async function openFolder() {
+  interacted = true;
+  if (useFilePicker || !window.showDirectoryPicker || !window.isSecureContext) { $("folderInput").click(); return; }
+  try {
+    const directory = await window.showDirectoryPicker({mode:"read"});
+    const files = [];
+    for await (const entry of directory.values()) {
+      if (entry.kind === "file" && /\.html?$/i.test(entry.name)) files.push(await entry.getFile());
+    }
+    await importPages(files);
+  } catch (error) {
+    if (error.name === "AbortError") return;
+    useFilePicker = true;
+    say("Folder access failed. Choose Open a folder again to use the file picker.", true);
+  }
+}
+$("folderInput").onchange = async event => {
+  const files = [...event.target.files].filter(file => !file.webkitRelativePath || file.webkitRelativePath.split("/").length === 2);
+  event.target.value = "";
+  try { if (files.length) await importPages(files); else say("No pages found directly inside that folder.", true); }
+  catch (error) { say("Could not read those pages. " + error.message, true); }
+};
+$("blank").onclick = startBlank; $("starters").onclick = openStarters; $("folder").onclick = openFolder;
+$("commands").onclick = openCommands; $("theme").onclick = toggleTheme; $("closeMenu").onclick = () => $("menu").close();
+$("newFile").onclick = newFile; $("renameFile").onclick = renameFile; $("deleteFile").onclick = deleteFile;
+$("save").onclick = saveNow; $("run").onclick = runPreview;
+$("codeView").onclick = () => setPane("code"); $("previewView").onclick = () => setPane("preview");
+function shortcut(key) { return {k:openCommands,s:() => { if (currentFile()) saveNow(); },enter:runPreview}[key.toLowerCase()]; }
+document.addEventListener("keydown", event => {
+  if (event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const action = shortcut(event.key);
+  if (action) { event.preventDefault(); event.stopPropagation(); action(); }
+}, true);
+window.addEventListener("message", event => {
+  if (event.source === $("preview").contentWindow && typeof event.data?.slateShortcut === "string") shortcut(event.data.slateShortcut)?.();
+});
+$("menu").addEventListener("keydown", event => {
+  const buttons = [...$("menuItems").querySelectorAll("button")], index = buttons.indexOf(document.activeElement);
+  if (event.key === "ArrowDown" && buttons.length) { event.preventDefault(); buttons[(index+1)%buttons.length].focus(); }
+  if (event.key === "ArrowUp" && buttons.length) { event.preventDefault(); buttons[(index-1+buttons.length)%buttons.length].focus(); }
+  if (event.key === "Enter" && document.activeElement === $("filter")) { event.preventDefault(); buttons[0]?.click(); }
+});
+window.addEventListener("beforeunload", event => {
+  if (revision > savedRevision) { event.preventDefault(); event.returnValue = ""; }
+});
+updateThemeLabel();
+dbReady.then(db => {
+  if (!db) { say("Browser storage is unavailable. Changes will remain only in this tab.", true); return; }
+  const request = db.transaction("workspace").objectStore("workspace").get("current");
+  request.onsuccess = () => {
+    const saved = request.result;
+    if (interacted || !saved || !Array.isArray(saved.files) || !saved.files.length) return;
+    if (saved.files.every(file => file && typeof file.name === "string" && typeof file.text === "string" && /\.html?$/i.test(file.name))) startProject(saved, true);
+    else say("The saved workspace could not be read.", true);
+  };
+  request.onerror = () => say("The saved workspace could not be read.", true);
+}).catch(error => say("Browser storage could not be opened. " + error.message, true));
+</script>
+</body>
+</html>
