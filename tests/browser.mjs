@@ -77,11 +77,13 @@ async function palette(targetPage, label) {
   await targetPage.waitForFunction(() => !document.getElementById("paletteQuery"));
 }
 async function dialogButton(targetPage, label) {
-  await targetPage.waitForFunction(label =>
+  await targetPage.waitForFunction(expected =>
     [...document.querySelectorAll("#dialog[open] button")]
-      .some(button => !button.disabled && button.textContent.trim() === label), {}, label);
+      .some(button => !button.disabled && button.textContent.trim() === expected), {}, label);
   for (const button of await targetPage.$$("#dialog[open] button")) {
-    if (await button.evaluate(element => element.textContent.trim() === label)) {
+    const matches = await button.evaluate((element, expected) =>
+      !element.disabled && element.textContent.trim() === expected, label);
+    if (matches) {
       await button.click();
       return;
     }
@@ -94,8 +96,7 @@ async function prompt(targetPage, action, value, submit = "Create") {
   await dialogButton(targetPage, submit);
   await targetPage.waitForSelector("#field", { hidden: true });
 }
-const shellReady = targetPage =>
-  targetPage.waitForSelector("html[data-slate-ready=true]");
+const shellReady = targetPage => targetPage.waitForSelector("html[data-slate-ready=true]");
 const editorText = targetPage => targetPage.$eval(editorSelector, element =>
   [...element.querySelectorAll(".cm-line")].map(line => line.textContent).join("\n"));
 const textAt = (target, selector) => target.$eval(selector, element => element.textContent);
@@ -227,8 +228,7 @@ try {
     await page.click('[data-act="live"]');
     await page.waitForFunction(() =>
       document.getElementById("liveButton").getAttribute("aria-pressed") === "false");
-    await setEditor(page, original);
-    await chord(page, "Control", "Enter");
+    await setEditor(page, original); await chord(page, "Control", "Enter");
     const frame = await previewReady(page, "#out", "Hello from Slate");
     assert.equal(await frame.evaluate(() => {
       try { void parent.document; return false; } catch { return true; }
@@ -237,10 +237,8 @@ try {
   });
   await check("saved text and undo history survive a reload", async () => {
     const changed = '<h1 id="out">Changed fixture</h1>';
-    await setEditor(page, changed);
-    await saved(page, "index.html", changed);
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await shellReady(page);
+    await setEditor(page, changed); await saved(page, "index.html", changed);
+    await page.reload({ waitUntil: "domcontentloaded" }); await shellReady(page);
     await page.waitForSelector(editorSelector, { visible: true });
     assert.equal(await editorText(page), changed);
     await palette(page, "Undo file edit");
@@ -250,14 +248,13 @@ try {
   await check("file rename preserves identity", async () => {
     const id = (await storedProject(page)).files.find(file => file.path === "index.html").id;
     await prompt(page, "Rename selected file or folder", "home.html", "Rename");
-    const after = await saved(page, "home.html", original);
-    assert.equal(after.files.find(file => file.path === "home.html").id, id);
+    assert.equal((await saved(page, "home.html", original))
+      .files.find(file => file.path === "home.html").id, id);
   });
   await check("folders, tabs, project replacement, and file find operate through the UI", async () => {
     await prompt(page, "New folder", "notes");
     await prompt(page, "New file", "notes/note.txt");
-    await setEditor(page, "alpha fixture");
-    await saved(page, "notes/note.txt", "alpha fixture");
+    await setEditor(page, "alpha fixture"); await saved(page, "notes/note.txt", "alpha fixture");
     await page.focus('#tabs [role="tab"][aria-selected="true"]');
     await page.keyboard.press("ArrowLeft");
     await page.waitForFunction(() =>
@@ -268,24 +265,19 @@ try {
       document.activeElement?.matches('[role="tab"][aria-selected="true"]') &&
       document.activeElement.textContent.includes("note.txt"));
     await palette(page, "Search project");
-    await fill(page, "#searchQuery", "alpha");
-    await fill(page, "#replaceText", "beta");
-    await page.click('[data-act="replace-all"]');
-    await dialogButton(page, "Replace all");
+    await fill(page, "#searchQuery", "alpha"); await fill(page, "#replaceText", "beta");
+    await page.click('[data-act="replace-all"]'); await dialogButton(page, "Replace all");
     await saved(page, "notes/note.txt", "beta fixture");
     assert.match(await textAt(page, "#noticeText"), /Updated\s+1\s+file/);
-    await palette(page, "Undo file edit");
-    await saved(page, "notes/note.txt", "alpha fixture");
-    await page.click(editorSelector);
-    await chord(page, "Control", "f");
+    await palette(page, "Undo file edit"); await saved(page, "notes/note.txt", "alpha fixture");
+    await page.click(editorSelector); await chord(page, "Control", "f");
     await page.waitForSelector(".cm-search input", { visible: true });
     await palette(page, "Close file find");
     await page.waitForSelector(".cm-search", { hidden: true });
     const folder = await treeRow(page, "notes");
     if (await folder.evaluate(element => element.getAttribute("aria-expanded") === "false")) await folder.click();
     await (await treeRow(page, "note.txt")).click();
-    await palette(page, "Delete selected file or folder");
-    await dialogButton(page, "Delete");
+    await palette(page, "Delete selected file or folder"); await dialogButton(page, "Delete");
     await until(async () => !(await storedProject(page)).files
       .some(file => file.path === "notes/note.txt"), "file deletion committed");
   });
@@ -295,8 +287,7 @@ try {
       const record = await readRecord(page, "settings");
       return (record?.settings || record)?.theme === "light";
     }, "light theme committed");
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await shellReady(page);
+    await page.reload({ waitUntil: "domcontentloaded" }); await shellReady(page);
     assert.equal(await page.$eval("html", element => element.dataset.theme), "light");
   });
   await check("preview copy opens without an opener reference", async () => {
@@ -338,10 +329,8 @@ try {
   await check("ZIP import runs local TypeScript, JSON, CSS, assets, cycles, and file fetches", async () => {
     const chooser = page.waitForFileChooser();
     await palette(page, "Open project ZIP");
-    await (await chooser).accept([fixturePath]);
-    await dialogButton(page, "Open other project");
-    await saved(page, "index.html", html);
-    await chord(page, "Control", "Enter");
+    await (await chooser).accept([fixturePath]); await dialogButton(page, "Open other project");
+    await saved(page, "index.html", html); await chord(page, "Control", "Enter");
     const frame = await previewReady(page, "#out", expected);
     assert.equal(await frame.$eval("#out", element => getComputedStyle(element).color), "rgb(12, 34, 56)");
     await until(() => frame.$eval("#asset", element => element.naturalWidth === 8), "local image load");
@@ -353,10 +342,8 @@ try {
       try { await fetch("./message.txt", { method: "POST", body: "fixture" }); } catch { denied = true; }
       return [head.status, await head.text(), missing.status, denied];
     }), [200, "", 404, true]);
-    await page.select("#entry", "README.md");
-    await previewReady(page, "h1", "Fixture heading");
-    await page.select("#entry", "index.html");
-    await previewReady(page, "#out", expected);
+    await page.select("#entry", "README.md"); await previewReady(page, "h1", "Fixture heading");
+    await page.select("#entry", "index.html"); await previewReady(page, "#out", expected);
   });
   await check("a compile failure preserves the previous preview", async () => {
     await setEditor(page, '<script type="module">import "./missing-fixture.js";</script>');
@@ -364,29 +351,23 @@ try {
     await page.waitForFunction(() => document.documentElement.dataset.previewState === "error");
     const frame = await (await page.$("#previewFrame")).contentFrame();
     assert.equal(await textAt(frame, "#out"), expected);
-    await setEditor(page, html);
-    await saved(page, "index.html", html);
-    await chord(page, "Control", "Enter");
-    await previewReady(page, "#out", expected);
+    await setEditor(page, html); await saved(page, "index.html", html);
+    await chord(page, "Control", "Enter"); await previewReady(page, "#out", expected);
   });
   let latest = html + "<!-- second-tab fixture -->";
   await check("another tab cannot be silently overwritten", async () => {
     const other = await context.newPage();
     observe(other);
-    await other.goto(origin + "/#work", { waitUntil: "domcontentloaded" });
-    await shellReady(other);
-    await setEditor(other, latest);
-    await saved(other, "index.html", latest);
+    await other.goto(origin + "/#work", { waitUntil: "domcontentloaded" }); await shellReady(other);
+    await setEditor(other, latest); await saved(other, "index.html", latest);
     await setEditor(page, "<h1>Unsaved first-tab fixture</h1>");
     await palette(page, "Save in this browser");
     await page.waitForFunction(() => document.getElementById("saveState").textContent === "Not saved");
     assert.equal((await storedProject(page)).files.find(file => file.path === "index.html").text, latest);
-    await palette(page, "Reload saved browser copy");
-    await dialogButton(page, "Reload browser copy");
+    await palette(page, "Reload saved browser copy"); await dialogButton(page, "Reload browser copy");
     await until(async () => await editorText(page) === latest, "browser-copy reload");
     await other.close();
-    await chord(page, "Control", "Enter");
-    await previewReady(page, "#out", expected);
+    await chord(page, "Control", "Enter"); await previewReady(page, "#out", expected);
   });
   await check("narrow layouts switch panes without horizontal page overflow", async () => {
     await page.setViewport({ width: 390, height: 844 });
@@ -402,17 +383,12 @@ try {
   await check("cached editing and preview work with the server stopped", async () => {
     await until(() => page.evaluate(() => document.documentElement.dataset.offlineReady === "true" &&
       Boolean(navigator.serviceWorker.controller)), "verified offline app files", 60000);
-    await page.setCacheEnabled(false);
-    await page.setOfflineMode(true);
-    await stopServer();
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await shellReady(page);
+    await page.setCacheEnabled(false); await page.setOfflineMode(true); await stopServer();
+    await page.reload({ waitUntil: "domcontentloaded" }); await shellReady(page);
     await until(async () => await editorText(page) === latest, "offline saved text");
     latest = latest.replace("</body>", '<p id="offline-proof">Offline change</p></body>');
-    await setEditor(page, latest);
-    await saved(page, "index.html", latest);
-    await chord(page, "Control", "Enter");
-    await previewReady(page, "#offline-proof", "Offline change");
+    await setEditor(page, latest); await saved(page, "index.html", latest);
+    await chord(page, "Control", "Enter"); await previewReady(page, "#offline-proof", "Offline change");
   });
   assert.deepEqual(browserErrors, [], "Unexpected browser JavaScript errors.");
   console.log("All listed browser checks completed.");
