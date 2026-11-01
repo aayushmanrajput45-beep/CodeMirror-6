@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Slate",
+  "short_name": "Slate",
+  "description": "Edit project files and preview web pages in your browser.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/#work",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#171a17",
+  "theme_color": "#171a17",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
