@@ -1,0 +1,15 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="512"
+  height="512"
+  viewBox="0 0 64 64"
+  role="img"
+  aria-labelledby="slate-icon-title"
+>
+  <title id="slate-icon-title">Slate</title>
+  <rect width="64" height="64" fill="#171a17"/>
+  <path
+    d="M48 16H16v20h24v4H16v8h32V28H24v-4h24Z"
+    fill="#e5e8e0"
+  />
+</svg>
