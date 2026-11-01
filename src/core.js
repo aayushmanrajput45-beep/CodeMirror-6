@@ -1,12 +1,7 @@
 export const NL = "\n";
-
 export const DEFAULT_SETTINGS = Object.freeze({
-  theme: "dark",
-  fontSize: 13,
-  tabSize: 2,
-  wrap: true,
-  live: true,
-  external: false
+  theme: "dark", fontSize: 13, tabSize: 2,
+  wrap: true, live: true, external: false
 });
 
 const PAGE_TYPES = new Set(["html", "htm", "md", "markdown"]);
@@ -15,7 +10,6 @@ const BINARY_TYPES = new Set([
   "woff", "woff2", "ttf", "otf", "mp3", "wav", "ogg",
   "mp4", "webm", "pdf", "zip", "gz", "bin", "wasm"
 ]);
-
 const MIME_TYPES = {
   html: "text/html", htm: "text/html", css: "text/css",
   js: "text/javascript", mjs: "text/javascript",
@@ -43,18 +37,18 @@ export function esc(value) {
 }
 
 export const basename = path => String(path).split("/").pop();
-export const dirname = path => path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+export const dirname = path =>
+  path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
 export const ext = path => {
   const name = basename(path);
   return name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
 };
 export const mime = path => MIME_TYPES[ext(path)] || "application/octet-stream";
-export const remote = value => /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith("//");
-export const isPage = file => !file.binary && PAGE_TYPES.has(ext(file.path));
-
-export function safeJSON(value) {
-  return (JSON.stringify(value) ?? "null").replaceAll("<", "\\u003c");
-}
+export const remote = value =>
+  /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith("//");
+export const isPage = file => Boolean(file && !file.binary && PAGE_TYPES.has(ext(file.path)));
+export const safeJSON = value =>
+  (JSON.stringify(value) ?? "null").replaceAll("<", "\\u003c");
 
 export function cleanPath(value) {
   const raw = String(value ?? "").trim().replaceAll("\\", "/");
@@ -68,9 +62,7 @@ export function cleanPath(value) {
     if (part === "..") {
       if (!parts.length) throw new Error("That path leaves this project.");
       parts.pop();
-    } else {
-      parts.push(part);
-    }
+    } else parts.push(part);
   }
   if (!parts.length) throw new Error("Enter a file or folder name.");
   return parts.join("/");
@@ -124,8 +116,7 @@ export function base64(bytes) {
 
 export function dataURL(file) {
   const bytes = file.binary
-    ? new Uint8Array(file.data)
-    : new TextEncoder().encode(file.text);
+    ? new Uint8Array(file.data) : new TextEncoder().encode(file.text);
   return "data:" + mime(file.path) + ";base64," + base64(bytes);
 }
 
@@ -167,8 +158,8 @@ export function newProject(name, files = [], dirs = []) {
     if (paths.has(folder)) throw new Error("A file is also being used as a folder: " + folder);
   }
   const pages = records.filter(isPage);
-  const entry = pages.find(file => file.path === "index.html")
-    || pages.find(file => file.path === "index.htm") || pages[0];
+  const entry = pages.find(file => file.path === "index.html") ||
+    pages.find(file => file.path === "index.htm") || pages[0];
   const first = entry || records.find(file => !file.binary) || records[0];
   const now = Date.now();
   return {
@@ -205,7 +196,8 @@ export function restoreProject(value) {
   return project;
 }
 
-export const blankProject = () => newProject("Untitled", [{ path: "index.html", text: "" }]);
+export const blankProject = () =>
+  newProject("Untitled", [{ path: "index.html", text: "" }]);
 
 function literalPattern(query, matchCase) {
   const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -251,54 +243,126 @@ export async function zipProject(project) {
 }
 
 export async function unzipProject(file) {
-  const { Unzip, AsyncUnzipInflate } = await import("fflate");
+  const { unzip, Unzip, AsyncUnzipInflate } = await import("fflate");
   const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length < 22) throw new Error("This file is not a complete ZIP archive.");
+
+  const headers = new Map();
+  await new Promise((resolve, reject) => {
+    try {
+      unzip(bytes, {
+        filter(entry) {
+          const raw = entry.name.replaceAll("\\", "/");
+          if (raw !== raw.trim()) {
+            throw new Error("Surrounding spaces in ZIP paths are unsupported: " + entry.name);
+          }
+          if (raw.split("/").includes("..")) {
+            throw new Error("Unsafe ZIP path: " + entry.name);
+          }
+          const path = cleanPath(raw);
+          if (headers.has(entry.name)) throw new Error("Duplicate ZIP entry: " + entry.name);
+          if (!Number.isSafeInteger(entry.originalSize) || entry.originalSize < 0) {
+            throw new Error("The ZIP contains an invalid file size: " + entry.name);
+          }
+          if (![0, 8].includes(entry.compression)) {
+            throw new Error("The ZIP uses an unsupported storage method: " + entry.name);
+          }
+          const directory = raw.endsWith("/");
+          if (directory && entry.originalSize !== 0) {
+            throw new Error("A ZIP folder unexpectedly contains file data: " + entry.name);
+          }
+          headers.set(entry.name, { path, directory, size: entry.originalSize });
+          return false;
+        }
+      }, error => error ? reject(error) : resolve());
+    } catch (error) {
+      reject(error);
+    }
+  });
+
   return new Promise((resolve, reject) => {
-    const results = [], dirs = [], streams = [];
+    const results = [], dirs = [], streams = [], seen = new Set();
     let pending = 0, parsed = false, settled = false;
+
     const fail = error => {
       if (settled) return;
       settled = true;
-      for (const stream of streams) { try { stream.terminate?.(); } catch {} }
+      for (const stream of streams) {
+        try { stream.terminate?.(); } catch {}
+      }
       reject(error);
     };
+
     const finish = () => {
       if (!parsed || pending || settled) return;
       try {
+        if (seen.size !== headers.size) {
+          throw new Error("The ZIP file list does not match its stored files.");
+        }
         const name = basename(file.name || "Imported project.zip").replace(/[.]zip$/i, "");
         const project = newProject(name, results.filter(Boolean), dirs);
         settled = true;
         resolve(project);
-      } catch (error) { fail(error); }
+      } catch (error) {
+        fail(error);
+      }
     };
+
     const reader = new Unzip(entry => {
-      if (settled) { entry.terminate?.(); return; }
+      if (settled) {
+        entry.terminate?.();
+        return;
+      }
       streams.push(entry);
       try {
-        const raw = entry.name.replaceAll("\\", "/");
-        if (raw.split("/").includes("..")) throw new Error("Unsafe ZIP path: " + entry.name);
-        const path = cleanPath(raw), directory = raw.endsWith("/");
+        const metadata = headers.get(entry.name);
+        if (!metadata || seen.has(entry.name)) {
+          throw new Error("The ZIP contains unexpected or repeated file data: " + entry.name);
+        }
+        seen.add(entry.name);
         const position = results.length, chunks = [];
+        let length = 0;
         results.push(null);
         pending++;
         entry.ondata = (error, chunk, final) => {
           if (settled) return;
-          if (error) { fail(error); return; }
-          if (!directory) chunks.push(chunk);
+          if (error) {
+            fail(error);
+            return;
+          }
+          if (chunk) {
+            length += chunk.length;
+            if (!metadata.directory) chunks.push(chunk);
+          }
           if (!final) return;
+          if (length !== metadata.size) {
+            fail(new Error("The ZIP contains incomplete file data: " + entry.name));
+            return;
+          }
           (async () => {
-            if (directory) dirs.push(path);
-            else results[position] = await readFile(new Blob(chunks), path);
+            const decoded = metadata.directory
+              ? null : await readFile(new Blob(chunks), metadata.path);
+            if (settled) return;
+            if (metadata.directory) dirs.push(metadata.path);
+            else results[position] = decoded;
             pending--;
             finish();
           })().catch(fail);
         };
         entry.start();
-      } catch (error) { fail(error); }
+      } catch (error) {
+        fail(error);
+      }
     });
+
     reader.register(AsyncUnzipInflate);
-    try { reader.push(bytes, true); parsed = true; finish(); }
-    catch (error) { fail(error); }
+    try {
+      reader.push(bytes, true);
+      parsed = true;
+      finish();
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 
@@ -387,7 +451,10 @@ button.onclick = () => {
     '<link rel="stylesheet" href="styles.css">', "</head>", "<body>", example.html,
     example.script ? '<script src="app.js" defer></script>' : "", "</body>", "</html>"
   ].filter(Boolean).join(NL);
-  const files = [{ path: "index.html", text: html }, { path: "styles.css", text: STARTER_CSS }];
+  const files = [
+    { path: "index.html", text: html },
+    { path: "styles.css", text: STARTER_CSS }
+  ];
   if (example.script) files.push({ path: "app.js", text: example.script });
   return newProject(kind, files);
 }
