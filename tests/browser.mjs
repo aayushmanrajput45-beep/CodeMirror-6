@@ -274,6 +274,7 @@ try {
     await page.waitForSelector(".cm-search input", { visible: true });
     await palette(page, "Close file find");
     await page.waitForSelector(".cm-search", { hidden: true });
+    await palette(page, "Show files");
     const folder = await treeRow(page, "notes");
     if (await folder.evaluate(element => element.getAttribute("aria-expanded") === "false")) await folder.click();
     await (await treeRow(page, "note.txt")).click();
