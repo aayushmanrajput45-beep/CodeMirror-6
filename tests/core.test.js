@@ -2,42 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { zipSync } from "fflate";
 import {
-  DEFAULT_SETTINGS,
-  makeId,
-  esc,
-  basename,
-  dirname,
-  mime,
-  cleanPath,
-  folderPaths,
-  readFile as readProjectFile,
-  blankProject,
-  restoreProject,
-  starter,
-  searchFiles,
-  replaceMatches,
-  zipProject,
-  unzipProject
+  DEFAULT_SETTINGS, makeId, esc, basename, dirname, mime,
+  cleanPath, resolveFile, folderPaths, readFile as readProjectFile,
+  blankProject, restoreProject, starter, searchFiles,
+  replaceMatches, zipProject, unzipProject
 } from "../src/core.js";
 
 const encoder = new TextEncoder();
 
 function textFile(path, text = "") {
-  return {
-    id: makeId(),
-    path,
-    binary: false,
-    text
-  };
+  return { id: makeId(), path, binary: false, text };
 }
 
 function binaryFile(path, bytes) {
-  return {
-    id: makeId(),
-    path,
-    binary: true,
-    data: new Uint8Array(bytes)
-  };
+  return { id: makeId(), path, binary: true, data: new Uint8Array(bytes) };
 }
 
 function projectWith(files, dirs = []) {
@@ -76,9 +54,7 @@ function fileContents(project) {
 }
 
 function archiveFile(bytes, name = "fixture.zip") {
-  return new File([bytes], name, {
-    type: "application/zip"
-  });
+  return new File([bytes], name, { type: "application/zip" });
 }
 
 test("defaults use the dark theme and disable external resources", () => {
@@ -92,20 +68,16 @@ test("defaults use the dark theme and disable external resources", () => {
 
 test("generated identifiers are nonempty and distinct", () => {
   const ids = Array.from({ length: 32 }, () => makeId());
-
   for (const id of ids) {
     assert.equal(typeof id, "string");
     assert.ok(id.length > 0);
   }
-
   assert.equal(new Set(ids).size, ids.length);
 });
 
 test("HTML escaping preserves ordinary text and escapes markup", () => {
   assert.equal(esc("Slate files"), "Slate files");
-
   const escaped = esc(`<script title="'">&</script>`);
-
   assert.ok(!escaped.includes("<"));
   assert.ok(!escaped.includes(">"));
   assert.ok(!escaped.includes('"'));
@@ -122,10 +94,7 @@ test("file name helpers retain project-relative folder paths", () => {
 
 test("canonical paths preserve spaces and Unicode names", () => {
   assert.equal(cleanPath("src/app.js"), "src/app.js");
-  assert.equal(
-    cleanPath("assets/profile photo.svg"),
-    "assets/profile photo.svg"
-  );
+  assert.equal(cleanPath("assets/profile photo.svg"), "assets/profile photo.svg");
   assert.equal(cleanPath("notes/café.md"), "notes/café.md");
 });
 
@@ -140,7 +109,6 @@ test("common web files receive appropriate content types", () => {
 
 test("a blank project contains one empty HTML file", () => {
   const project = blankProject();
-
   assert.equal(project.version, 1);
   assert.equal(project.files.length, 1);
   assert.equal(project.files[0].path, "index.html");
@@ -154,19 +122,15 @@ test("a blank project contains one empty HTML file", () => {
 test("separate blank projects do not share identifiers or file objects", () => {
   const first = blankProject();
   const second = blankProject();
-
   assert.notEqual(first.id, second.id);
   assert.notEqual(first.files[0].id, second.files[0].id);
-
   first.files[0].text = "Changed fixture";
-
   assert.equal(second.files[0].text, "");
 });
 
 test("restoring a project keeps its project and file identifiers", () => {
   const original = blankProject();
   const restored = restoreProject(original);
-
   assert.equal(restored.id, original.id);
   assert.equal(restored.files[0].id, original.files[0].id);
   assert.equal(restored.files[0].text, original.files[0].text);
@@ -175,18 +139,13 @@ test("restoring a project keeps its project and file identifiers", () => {
 test("a renamed file can retain its identifier", () => {
   const original = blankProject();
   const file = original.files[0];
-
   const renamed = restoreProject({
     ...original,
-    files: [{
-      ...file,
-      path: "pages/home.html"
-    }],
+    files: [{ ...file, path: "pages/home.html" }],
     active: "pages/home.html",
     tabs: ["pages/home.html"],
     entry: "pages/home.html"
   });
-
   assert.equal(renamed.files[0].id, file.id);
   assert.equal(renamed.files[0].path, "pages/home.html");
   assert.ok(directoryList(renamed).includes("pages"));
@@ -194,13 +153,7 @@ test("a renamed file can retain its identifier", () => {
 
 test("restoring closed tabs does not reopen a file", () => {
   const original = blankProject();
-
-  const restored = restoreProject({
-    ...original,
-    active: null,
-    tabs: []
-  });
-
+  const restored = restoreProject({ ...original, active: null, tabs: [] });
   assert.equal(restored.active, null);
   assert.deepEqual(restored.tabs, []);
   assert.equal(restored.files.length, original.files.length);
@@ -211,12 +164,8 @@ test("folders include file parents and explicitly empty folders", () => {
     textFile("index.html", "<p>Fixture</p>"),
     textFile("src/components/button.js", "export const button = true;")
   ], ["assets/empty"]);
-
   assert.deepEqual(directoryList(project), [
-    "assets",
-    "assets/empty",
-    "src",
-    "src/components"
+    "assets", "assets/empty", "src", "src/components"
   ]);
 });
 
@@ -240,24 +189,57 @@ test("an explicit folder cannot have the same path as a file", () => {
   ], ["index.html"]));
 });
 
-for (const kind of ["Personal site", "Landing page", "Small app"]) {
-  test(`${kind} starter provides editable HTML, CSS, and JavaScript`, () => {
+for (const [kind, hasJavaScript] of [
+  ["Personal site", false],
+  ["Landing page", true],
+  ["Small app", true]
+]) {
+  test(`${kind} starter provides linked, editable example files`, () => {
     const project = starter(kind);
-
-    assert.ok(project.files.some(file =>
-      !file.binary && /\.html?$/i.test(file.path)
-    ));
-    assert.ok(project.files.some(file =>
-      !file.binary && /\.css$/i.test(file.path)
-    ));
-    assert.ok(project.files.some(file =>
+    const page = project.files.find(file => file.path === "index.html");
+    const styles = project.files.find(file => file.path === "styles.css");
+    const scripts = project.files.filter(file =>
       !file.binary && /\.js$/i.test(file.path)
-    ));
+    );
+
+    assert.equal(project.name, kind);
+    assert.equal(project.entry, "index.html");
+    assert.equal(project.active, "index.html");
+    assert.deepEqual(project.tabs, ["index.html"]);
+    assert.ok(page && !page.binary);
+    assert.ok(styles && !styles.binary);
+    assert.match(page.text, /example/i);
+    assert.ok(styles.text.trim().length > 0);
+
+    const linkedStyles = Array.from(
+      page.text.matchAll(/<link\b[^>]*\bhref\s*=\s*(["'])(.*?)\1/gi),
+      match => resolveFile(project.files, match[2], page.path)
+    );
+    const linkedScripts = Array.from(
+      page.text.matchAll(/<script\b[^>]*\bsrc\s*=\s*(["'])(.*?)\1/gi),
+      match => resolveFile(project.files, match[2], page.path)
+    );
+
+    assert.ok(linkedStyles.includes(styles));
+    if (hasJavaScript) {
+      assert.ok(scripts.length > 0);
+      assert.ok(linkedScripts.length > 0);
+      for (const script of linkedScripts) {
+        assert.ok(scripts.includes(script));
+        assert.ok(script.text.trim().length > 0);
+      }
+    } else {
+      assert.equal(scripts.length, 0);
+      assert.equal(linkedScripts.length, 0);
+      assert.doesNotMatch(page.text, /<script\b/i);
+    }
 
     const paths = project.files.map(file => file.path);
+    const ids = project.files.map(file => file.id);
     assert.equal(new Set(paths).size, paths.length);
-
+    assert.equal(new Set(ids).size, ids.length);
     for (const file of project.files) {
+      assert.equal(cleanPath(file.path), file.path);
       if (!file.binary) assert.equal(typeof file.text, "string");
     }
   });
@@ -265,9 +247,9 @@ for (const kind of ["Personal site", "Landing page", "Small app"]) {
 
 test("reading text preserves its byte-order mark and line endings", async () => {
   const text = "\uFEFFFirst line\r\nSecond line\r\n";
-  const blob = new Blob([text], { type: "text/plain" });
-  const file = await readProjectFile(blob, "notes.txt");
-
+  const file = await readProjectFile(
+    new Blob([text], { type: "text/plain" }), "notes.txt"
+  );
   assert.equal(file.path, "notes.txt");
   assert.equal(file.binary, false);
   assert.equal(file.text, text);
@@ -275,9 +257,7 @@ test("reading text preserves its byte-order mark and line endings", async () => 
 
 test("invalid UTF-8 is kept as binary data", async () => {
   const bytes = new Uint8Array([255, 254, 128, 65]);
-  const blob = new Blob([bytes], { type: "text/plain" });
-  const file = await readProjectFile(blob, "invalid.txt");
-
+  const file = await readProjectFile(new Blob([bytes]), "invalid.txt");
   assert.equal(file.binary, true);
   assert.deepEqual(Array.from(file.data), Array.from(bytes));
 });
@@ -285,7 +265,6 @@ test("invalid UTF-8 is kept as binary data", async () => {
 test("a NUL byte prevents a file from being treated as editable text", async () => {
   const bytes = new Uint8Array([65, 0, 66]);
   const file = await readProjectFile(new Blob([bytes]), "nul.txt");
-
   assert.equal(file.binary, true);
   assert.deepEqual(Array.from(file.data), Array.from(bytes));
 });
@@ -296,10 +275,8 @@ test("project search respects case matching and excludes binary files", () => {
     textFile("app.js", 'const name = "Slate";\n'),
     binaryFile("asset.bin", encoder.encode("Slate"))
   ];
-
   const insensitive = searchFiles(files, "Slate", false);
   const sensitive = searchFiles(files, "Slate", true);
-
   assert.equal(insensitive.length, 4);
   assert.equal(sensitive.length, 2);
   assert.ok(insensitive.every(match => match.path !== "asset.bin"));
@@ -307,10 +284,7 @@ test("project search respects case matching and excludes binary files", () => {
 
 test("search treats punctuation as literal text rather than a pattern", () => {
   const text = "a.b[0]\naxb0\na.b[0]";
-  const matches = searchFiles([
-    textFile("notes.txt", text)
-  ], "a.b[0]", true);
-
+  const matches = searchFiles([textFile("notes.txt", text)], "a.b[0]", true);
   assert.deepEqual(
     matches.map(match => match.offset).sort((left, right) => left - right),
     [0, text.lastIndexOf("a.b[0]")]
@@ -319,20 +293,13 @@ test("search treats punctuation as literal text rather than a pattern", () => {
 
 test("search offsets refer to the original Unicode and CRLF source", () => {
   const text = "İ🙂 first line\r\nSecond café line\r\n";
-  const matches = searchFiles([
-    textFile("notes.txt", text)
-  ], "café", false);
-
+  const matches = searchFiles([textFile("notes.txt", text)], "café", false);
   assert.equal(matches.length, 1);
   assert.equal(matches[0].offset, text.indexOf("café"));
   assert.equal(matches[0].length, "café".length);
   assert.equal(matches[0].line, 2);
-
   assert.equal(
-    text.slice(
-      matches[0].offset,
-      matches[0].offset + matches[0].length
-    ),
+    text.slice(matches[0].offset, matches[0].offset + matches[0].length),
     "café"
   );
 });
@@ -342,7 +309,6 @@ test("replacement respects the case-matching option", () => {
     replaceMatches("Slate slate SLATE", "Slate", "Editor", true),
     "Editor slate SLATE"
   );
-
   assert.equal(
     replaceMatches("Slate slate SLATE", "Slate", "Editor", false),
     "Editor Editor Editor"
@@ -352,7 +318,6 @@ test("replacement respects the case-matching option", () => {
 test("replacement text does not interpret dollar-sign substitutions", () => {
   const source = "a.b[0] and a.b[0]";
   const replacement = "$& + $1 + $$";
-
   assert.equal(
     replaceMatches(source, "a.b[0]", replacement, true),
     source.split("a.b[0]").join(replacement)
@@ -368,12 +333,10 @@ test("ZIP round-trip preserves text, binary bytes, and empty folders", {
     textFile("assets/profile notes.txt", "Unicode: 🙂\n"),
     binaryFile("assets/raw.bin", [0, 1, 2, 127, 128, 254, 255])
   ], ["docs/empty"]);
-
   const expectedFiles = fileContents(project);
   const expectedFolders = directoryList(project);
   const bytes = await zipProject(project);
   const imported = await unzipProject(archiveFile(bytes));
-
   assert.deepEqual(fileContents(imported), expectedFiles);
   assert.deepEqual(directoryList(imported), expectedFolders);
   assert.deepEqual(fileContents(project), expectedFiles);
@@ -382,10 +345,8 @@ test("ZIP round-trip preserves text, binary bytes, and empty folders", {
 test("an empty project can be exported and imported", {
   timeout: 15000
 }, async () => {
-  const project = projectWith([]);
-  const bytes = await zipProject(project);
+  const bytes = await zipProject(projectWith([]));
   const imported = await unzipProject(archiveFile(bytes, "empty.zip"));
-
   assert.deepEqual(imported.files, []);
   assert.equal(imported.active, null);
   assert.deepEqual(imported.tabs, []);
@@ -395,22 +356,29 @@ for (const path of ["../outside.txt", "folder/../../outside.txt"]) {
   test(`ZIP import rejects an escaping archive path: ${path}`, {
     timeout: 15000
   }, async () => {
-    const bytes = zipSync({
-      [path]: encoder.encode("Unsafe archive fixture")
-    });
-
-    await assert.rejects(async () => {
-      await unzipProject(archiveFile(bytes, "unsafe.zip"));
-    });
+    const bytes = zipSync({ [path]: encoder.encode("Unsafe archive fixture") });
+    await assert.rejects(() => unzipProject(archiveFile(bytes, "unsafe.zip")));
   });
 }
 
-test("non-ZIP data is not accepted as a project archive", {
+for (const [description, bytes] of [
+  ["empty data", new Uint8Array()],
+  ["short plain text", encoder.encode("Not a ZIP")],
+  ["longer plain text", encoder.encode("This is not a ZIP archive.")]
+]) {
+  test(`non-ZIP data is rejected: ${description}`, {
+    timeout: 15000
+  }, async () => {
+    await assert.rejects(() => unzipProject(archiveFile(bytes, "broken.zip")));
+  });
+}
+
+test("ZIP import rejects a missing final archive byte", {
   timeout: 15000
 }, async () => {
-  const bytes = encoder.encode("This is not a ZIP archive.");
-
-  await assert.rejects(async () => {
-    await unzipProject(archiveFile(bytes, "broken.zip"));
+  const bytes = zipSync({
+    "index.html": encoder.encode("<p>Archive fixture</p>")
   });
+  const truncated = bytes.subarray(0, bytes.length - 1);
+  await assert.rejects(() => unzipProject(archiveFile(truncated, "truncated.zip")));
 });
