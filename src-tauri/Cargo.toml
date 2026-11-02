@@ -1,0 +1,28 @@
+[package]
+name = "slate"
+version = "0.1.0"
+description = "Slate developer workspace"
+authors = ["aayushmanrajput45-beep"]
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "slate_desktop_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slate"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+strip = "symbols"
