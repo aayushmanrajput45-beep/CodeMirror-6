@@ -1,0 +1,307 @@
+name: Desktop installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slate-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  RUSTUP_TOOLCHAIN: "1.99.1"
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  prepare:
+    name: Check app and prepare private downloads
+    if: >-
+      github.event.repository.private == false &&
+      github.event.repository.visibility == 'public' &&
+      github.repository == 'aayushmanrajput45-beep/CodeMirror-6' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_url: ${{ steps.release.outputs.release_url }}
+
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Install JavaScript dependencies
+        run: npm install --include=dev --no-audit --no-fund
+
+      - name: Run core tests, website build and browser checks
+        run: npm run build
+
+      - name: Install Rust tools
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" \
+            --profile minimal \
+            --component rustfmt \
+            --no-self-update
+          rustc --version
+          cargo --version
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Resolve shared Rust dependency versions
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+      - name: Create private development release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="slate-desktop-preview-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          version="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; process.stdout.write(JSON.parse(readFileSync("package.json", "utf8")).version)')"
+
+          notes="$(cat <<EOF
+          Development build of Slate's desktop foundation.
+
+          This is not the finished app or a stable release.
+          A successful installer build is not a desktop functionality or security audit.
+
+          Saving back to local folders, terminal, Git and extensions are unfinished.
+          Publisher-trusted signing and Apple notarization are not provided.
+          Operating-system security warnings or installation blocks may occur.
+
+          Build targets:
+          - Windows 64-bit installer.
+          - Linux 64-bit AppImage and Debian package.
+          - macOS 14 or later, for Intel and Apple Silicon.
+
+          The dependency lockfiles used for this build are attached.
+          Keep this release private until its downloads have been reviewed.
+
+          Source commit: ${GITHUB_SHA}
+          EOF
+          )"
+
+          release="$(gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name="$tag" \
+            -f target_commitish="$GITHUB_SHA" \
+            -f name="Slate desktop foundation ${version} — build ${GITHUB_RUN_NUMBER}" \
+            -f body="$notes" \
+            -F draft=true \
+            -F prerelease=true)"
+
+          release_id="$(printf '%s' "$release" | jq -r '.id')"
+          release_url="$(printf '%s' "$release" | jq -r '.html_url')"
+
+          gh release upload "$tag" \
+            package-lock.json \
+            src-tauri/Cargo.lock \
+            --repo "$GITHUB_REPOSITORY"
+
+          {
+            echo "release_id=$release_id"
+            echo "tag_name=$tag"
+            echo "release_url=$release_url"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Desktop foundation"
+            echo
+            echo "Website checks passed. Desktop builds are next."
+            echo
+            echo "[Private development release]($release_url)"
+            echo
+            echo "This release is a draft and is not published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  installers:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    if: >-
+      github.event.repository.private == false &&
+      github.event.repository.visibility == 'public' &&
+      github.repository == 'aayushmanrajput45-beep/CodeMirror-6' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - name: Windows
+            runner: windows-2022
+            rust_targets: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles nsis --ci -- --locked
+            checksum_file: SHA256-Windows.txt
+
+          - name: Linux
+            runner: ubuntu-22.04
+            rust_targets: x86_64-unknown-linux-gnu
+            args: --target x86_64-unknown-linux-gnu --bundles deb,appimage --ci -- --locked
+            checksum_file: SHA256-Linux.txt
+
+          - name: macOS
+            runner: macos-15-intel
+            rust_targets: aarch64-apple-darwin x86_64-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg --ci -- --locked
+            checksum_file: SHA256-macOS.txt
+
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Retrieve shared dependency lockfiles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag_name }}
+        run: |
+          is_draft="$(gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft \
+            --jq '.isDraft')"
+
+          if [ "$is_draft" != "true" ]; then
+            echo "::error::The development release must remain a draft."
+            exit 1
+          fi
+
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern package-lock.json \
+            --dir . \
+            --clobber
+
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern Cargo.lock \
+            --dir src-tauri \
+            --clobber
+
+      - name: Install locked JavaScript dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Install Linux build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libdbus-1-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Install Rust and platform targets
+        env:
+          RUST_TARGETS: ${{ matrix.rust_targets }}
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" \
+            --profile minimal \
+            --no-self-update
+          rustup target add --toolchain "$RUSTUP_TOOLCHAIN" $RUST_TARGETS
+          rustc --version
+          cargo --version
+
+      - name: Build and upload draft installers
+        id: desktop_build
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+        with:
+          projectPath: .
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          tagName: ${{ needs.prepare.outputs.tag_name }}
+          releaseDraft: true
+          prerelease: true
+          uploadWorkflowArtifacts: false
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
+          uploadPlainBinary: false
+          retryAttempts: "0"
+          args: ${{ matrix.args }}
+
+      - name: Add download checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag_name }}
+          BUILT_ARTIFACTS: ${{ steps.desktop_build.outputs.artifactPaths }}
+          CHECKSUM_FILE: ${{ matrix.checksum_file }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { createReadStream } from "node:fs";
+          import { stat, writeFile } from "node:fs/promises";
+          import { basename } from "node:path";
+
+          const paths = JSON.parse(process.env.BUILT_ARTIFACTS || "[]");
+          if (!Array.isArray(paths)) {
+            throw new Error("The build did not return a file list.");
+          }
+
+          const lines = [];
+          for (const path of paths) {
+            const info = await stat(path).catch(error => {
+              if (error.code === "ENOENT") return null;
+              throw error;
+            });
+            if (!info?.isFile()) continue;
+
+            const hash = createHash("sha256");
+            for await (const chunk of createReadStream(path)) {
+              hash.update(chunk);
+            }
+            lines.push(`${hash.digest("hex")}  ${basename(path)}`);
+          }
+
+          if (!lines.length) {
+            throw new Error("No installer files were available for checksums.");
+          }
+
+          await writeFile(
+            process.env.CHECKSUM_FILE,
+            lines.sort().join("\n") + "\n"
+          );
+          NODE
+
+          gh release upload "$RELEASE_TAG" "$CHECKSUM_FILE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
