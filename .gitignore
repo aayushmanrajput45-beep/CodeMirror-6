@@ -1,0 +1,34 @@
+# JavaScript dependencies and generated website files
+node_modules/
+dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+
+# Generated desktop files
+/src-tauri/target/
+/src-tauri/gen/
+/src-tauri/icons/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Private signing keys and certificate containers
+*.key
+*.p8
+*.p12
+*.pfx
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
+[Dd]esktop.ini
+
+# Keep dependency lockfiles eligible for commits
+!/package-lock.json
+!/src-tauri/Cargo.lock
